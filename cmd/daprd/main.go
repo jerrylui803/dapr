@@ -65,6 +65,7 @@ import (
 	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
 	pubsub_inmemory "github.com/dapr/components-contrib/pubsub/in-memory"
+	pubsub_mqlite "github.com/dapr/components-contrib/pubsub/mq-lite"
 	pubsub_jetstream "github.com/dapr/components-contrib/pubsub/jetstream"
 	pubsub_kafka "github.com/dapr/components-contrib/pubsub/kafka"
 	pubsub_mqtt "github.com/dapr/components-contrib/pubsub/mqtt"
@@ -277,6 +278,9 @@ func main() {
 			}),
 			pubsub_loader.New("in-memory", func() pubs.PubSub {
 				return pubsub_inmemory.New(logContrib)
+			}),
+			pubsub_loader.New("mq-lite", func() pubs.PubSub {
+				return pubsub_mqlite.New(logContrib)
 			}),
 		),
 		runtime.WithNameResolutions(
