@@ -491,10 +491,13 @@ func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
 
 func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 	var publishFunc func(ctx context.Context, msg *pubsubSubscribedMessage) error
+	println("jl debug: about to enter switch")
 	switch a.runtimeConfig.ApplicationProtocol {
 	case HTTPProtocol:
+		println("jl debug: Using publishFunc with HTTP")
 		publishFunc = a.publishMessageHTTP
 	case GRPCProtocol:
+		println("jl debug: Using publishFunc with GRPC")
 		publishFunc = a.publishMessageGRPC
 	}
 	topicRoutes, err := a.getTopicRoutes()
@@ -522,6 +525,8 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			if msg.Metadata == nil {
 				msg.Metadata = make(map[string]string, 1)
 			}
+			fmt.Printf("\n\nPrinting meta data from runtime.go\n %+v \n\nMetadata[pubsubname]:\n%+v\n\npubsubname:\n%s\n\nname:\n%s", msg.Metadata,
+				msg.Metadata[pubsubName], pubsubName, name)
 
 			msg.Metadata[pubsubName] = name
 
@@ -533,7 +538,10 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 			var cloudEvent map[string]interface{}
 			data := msg.Data
+			// fmt.Printf("%+v\n", msg)
+			fmt.Printf("This is data\n%+v\n", data)
 			if rawPayload {
+				//println("raw payload")
 				cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
 				data, err = a.json.Marshal(cloudEvent)
 				if err != nil {
@@ -541,6 +549,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 					return err
 				}
 			} else {
+				// println("not raw payload")
 				err = a.json.Unmarshal(msg.Data, &cloudEvent)
 				if err != nil {
 					log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
@@ -564,6 +573,40 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msg.Topic)
 				return nil
 			}
+
+			// jl  debug------------------------------------------------------------------------------------------
+			fmt.Printf("\n\n\n\n\nprinting from publishMessageHTTP() \n")
+			fmt.Printf("data  %+v\n", data)
+			fmt.Printf("meta data  %+v\n", msg.Metadata)
+
+			var dataMap map[string]interface{}
+			//var metaDataMap map[string]interface{}
+			//var metaDataMap map[string]interface{}
+			err = a.json.Unmarshal(data, &dataMap)
+			if err != nil {
+				println("msg.data: " + err.Error())
+			}
+
+			fmt.Printf("dataMap  %+v\n", dataMap)
+
+			metaDataJson, err := json.Marshal(msg.Metadata)
+			if err != nil {
+				println("msg.metadata: " + err.Error())
+			}
+
+			fmt.Printf("metaDataJson  %+v\n", metaDataJson)
+
+			dataMap["MetaData"] = msg.Metadata
+
+			dataWithMetaData, err := json.Marshal(dataMap)
+			if err != nil {
+				println("dataWithMetaData: " + err.Error())
+			}
+
+			fmt.Printf("dataWithMetaData  %+v\n", dataWithMetaData)
+
+			data = dataWithMetaData
+			// jl  debug done ------------------------------------------------------------------------------------------
 
 			return publishFunc(ctx, &pubsubSubscribedMessage{
 				cloudEvent: cloudEvent,
@@ -1401,6 +1444,8 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	req.WithRawData(msg.data, contenttype.CloudEventContentType)
 	req.WithCustomHTTPMetadata(msg.metadata)
 
+	fmt.Printf("logging metadata from publishMessageHTTP handler\n %+v\n", msg.metadata)
+
 	if cloudEvent[pubsub.TraceIDField] != nil {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
@@ -1408,6 +1453,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 	}
 
+	// jl debug, here is where it notify client
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		return errors.Wrap(err, "error from app channel while sending pub/sub event to app")
